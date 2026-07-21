@@ -24,12 +24,17 @@ const bundledFontFamilyFallback = <String>[
 ];
 
 Future<void> loadBundledFonts() async {
+  // DirectWrite leaves the COLRv1 and SVG fixture blank, so Windows uses the
+  // equivalent CBDT subset for deterministic pixel bounds.
+  final colorEmojiFilename = Platform.isWindows
+      ? 'NotoColorEmoji-WindowsSubset.ttf'
+      : 'NotoColorEmoji-Regular.ttf';
   jetBrainsMonoBytes = await _load(
     'JetBrainsMono-Regular.ttf',
     'JetBrains Mono',
   );
   await _load('JetBrainsMono-Bold.ttf', 'JetBrains Mono');
-  await _load('NotoColorEmoji-Regular.ttf', 'Noto Color Emoji');
+  await _load(colorEmojiFilename, 'Noto Color Emoji');
   await _load('NotoEmoji-Regular.ttf', 'Noto Emoji');
   await _load('NotoSansJP-Regular.ttf', 'Noto Sans JP');
 }

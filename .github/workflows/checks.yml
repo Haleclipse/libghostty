@@ -248,16 +248,15 @@ jobs:
         working-directory: packages/libghostty
         run: very_good test --platform=chrome test/wasm
 
-  test-flterm:
-    name: test-flterm
+  test-flterm-golden:
+    name: test-flterm-linux-golden
     needs: [analyze-flterm, changes]
     if: needs.changes.outputs.flterm == 'true'
     runs-on: ubuntu-latest
-    # Run inside the cirruslabs Flutter image so the libfreetype/libpng/skia
-    # stack matches local Docker development. Vanilla ubuntu-latest pulls
-    # in newer freetype security builds that shift anti-aliased pixels and
-    # break golden tests. When the `stable` tag is republished, regenerate
-    # goldens via `packages/flterm/tool/update_goldens.sh`.
+    # Goldens run inside the cirruslabs Flutter image so the
+    # libfreetype/libpng/skia stack matches local Docker development. When the
+    # `stable` tag is republished, regenerate them with
+    # `packages/flterm/tool/update_goldens.sh`.
     container:
       image: ghcr.io/cirruslabs/flutter:stable
     steps:
@@ -292,13 +291,88 @@ jobs:
           tar xzf ghostty.tar.gz -C ghostty --strip-components=1
           rm ghostty.tar.gz
       - run: flutter pub get
-      - name: install very_good_cli
+      - name: run golden tests
+        working-directory: packages/flterm
+        run: flutter test --tags golden
+
+  test-flterm-desktop:
+    name: test-flterm-${{ matrix.os }}
+    needs: [analyze-flterm, changes]
+    if: needs.changes.outputs.flterm == 'true'
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - os: linux-x64
+            runner: ubuntu-latest
+          - os: macos-arm64
+            runner: macos-15
+          - os: windows-x64
+            runner: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-tags: false
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          channel: stable
+          cache: true
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        with:
+          version: ${{ env.ZIG_VERSION }}
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.pub-cache
+          key: pub-flterm-${{ runner.os }}-${{ hashFiles('**/pubspec.lock') }}
+          restore-keys: pub-flterm-${{ runner.os }}-
+      - name: resolve ghostty source
+        id: ghostty
         run: |
-          dart pub global activate very_good_cli
-          echo "$HOME/.pub-cache/bin" >> "$GITHUB_PATH"
+          COMMIT=$(cat packages/libghostty/ghostty.version)
+          echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: ghostty-cache
+        with:
+          path: ghostty
+          key: ghostty-src-${{ steps.ghostty.outputs.commit }}
+      - name: download ghostty source
+        if: steps.ghostty-cache.outputs.cache-hit != 'true'
+        run: |
+          curl -fsSL "https://github.com/ghostty-org/ghostty/archive/${{ steps.ghostty.outputs.commit }}.tar.gz" -o ghostty.tar.gz
+          mkdir -p ghostty
+          tar xzf ghostty.tar.gz -C ghostty --strip-components=1
+          rm ghostty.tar.gz
+      - run: flutter pub get
       - name: run tests
         working-directory: packages/flterm
-        run: very_good test
+        run: flutter test --exclude-tags golden
+
+  test-flterm-web:
+    name: test-flterm-web-wasm
+    needs: [analyze-flterm, changes]
+    if: needs.changes.outputs.flterm == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-tags: false
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          channel: stable
+          cache: true
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.pub-cache
+          key: pub-flterm-web-${{ hashFiles('**/pubspec.lock') }}
+          restore-keys: pub-flterm-web-
+      - run: flutter pub get
+      - name: build WebAssembly example
+        working-directory: packages/flterm/example
+        run: flutter build web --release --wasm
 
   test-ptyx-dart:
     name: test-ptyx-dart-${{ matrix.os }}
@@ -412,7 +486,7 @@ jobs:
       - name: build rust docs
         run: cargo doc --manifest-path packages/ptyx/native/Cargo.toml --no-deps
 
-  # Single required status that aggregates every conditional job above.
+  # Single required status that aggregates every job above.
   # Branch protection requires only this context, which lets the matrix
   # and path-filtered jobs skip without blocking merges. Fails if any
   # dependency failed or was cancelled; succeeds when they all passed
@@ -421,13 +495,16 @@ jobs:
     name: checks-passed
     if: always()
     needs:
+      - changes
       - analyze
       - analyze-libghostty
       - analyze-flterm
       - analyze-ptyx
       - test-libghostty-native
       - test-libghostty-wasm
-      - test-flterm
+      - test-flterm-golden
+      - test-flterm-desktop
+      - test-flterm-web
       - test-ptyx-dart
       - test-ptyx-rust
     runs-on: ubuntu-latest

@@ -1,0 +1,19 @@
+# Local and generated files
+*.class
+*.log
+*.pyc
+*.swp
+migrate_working_dir/
+*.iml
+*.ipr
+*.iws
+
+# Flutter/Dart/Pub related
+/pubspec.lock
+**/doc/api/
+/build/
+/coverage/
+
+# Development-only sources
+/test/
+/tool/
