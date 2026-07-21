@@ -1,4 +1,5 @@
 tags:
+  benchmark: {}
   ffi:
     test_on: vm
   # Goldens are byte-pinned to the cirruslabs/flutter:stable image (see
