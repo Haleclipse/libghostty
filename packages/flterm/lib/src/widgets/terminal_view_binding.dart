@@ -86,6 +86,17 @@ abstract interface class TerminalViewBinding {
   /// Requests keyboard focus for the attached view.
   void requestFocus();
 
+  /// Begins a selection-handle drag anchored at [anchor].
+  ///
+  /// [anchor] is in screen coordinates (scrollback included) so the fixed
+  /// endpoint stays valid while the viewport scrolls during the drag.
+  /// Continue with [updateSelectionDrag] for the moving endpoint and
+  /// finish with [handleSelectionRelease].
+  void startSelectionHandleDrag({
+    required Position anchor,
+    required Offset localPosition,
+  });
+
   /// Applies one autoscroll tick for an active drag selection.
   void updateSelectionAutoscroll({
     required Position cell,

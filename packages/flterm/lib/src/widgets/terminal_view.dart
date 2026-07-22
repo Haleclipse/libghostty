@@ -10,6 +10,7 @@ import '../links/link_settings.dart';
 import '../rendering.dart';
 import '../rendering/terminal_render_cache.dart';
 import 'link_interaction.dart';
+import 'selection_handles.dart';
 import 'terminal_controller.dart';
 import 'terminal_gesture_detector.dart';
 import 'terminal_scope.dart';
@@ -289,7 +290,7 @@ class _TerminalViewState extends State<TerminalView> {
   Widget _build(BuildContext context, TerminalRenderCache cache) {
     return GestureDetector(
       behavior: .translucent,
-      onTap: _controller.requestFocus,
+      onTap: _handleTap,
       child: ColoredBox(
         // Backdrop tinted by backgroundOpacity. The repaint boundary
         // TerminalRenderBox skips its own grid fill below 1.0 and
@@ -314,30 +315,39 @@ class _TerminalViewState extends State<TerminalView> {
                   focusNode: _focusNode,
                   autofocus: widget.autofocus,
                   onFocusChange: _handleFocusChange,
-                  child: TerminalGestureDetector(
-                    links: _links,
+                  child: TerminalSelectionHandles(
+                    theme: _theme,
                     metrics: _metrics,
                     binding: _binding,
+                    controller: _controller,
                     visibleRows: _visibleRows,
-                    settings: widget.gestureSettings,
                     scrollController: _scrollController,
-                    onLinkActivate: widget.linkSettings.onActivate,
-                    child: Scrollable(
-                      controller: _scrollController,
-                      physics: widget.scrollPhysics,
-                      viewportBuilder: (_, offset) => TerminalRenderer(
-                        key: _rendererKey,
-                        theme: _theme,
-                        offset: offset,
-                        metrics: _metrics,
-                        renderObserver: _controller,
-                        terminal: _binding.terminal,
-                        renderCache: cache,
-                        preeditText: _binding.preeditText,
-                        blinkVisible: _blinkVisible,
-                        linkSnapshot: _links.snapshot(),
-                        onResize: _handleResize,
-                        onViewportChanged: _binding.handleViewportChanged,
+                    child: TerminalGestureDetector(
+                      links: _links,
+                      metrics: _metrics,
+                      binding: _binding,
+                      visibleRows: _visibleRows,
+                      settings: widget.gestureSettings,
+                      scrollController: _scrollController,
+                      onLinkActivate: widget.linkSettings.onActivate,
+                      onTap: _handleTap,
+                      child: Scrollable(
+                        controller: _scrollController,
+                        physics: widget.scrollPhysics,
+                        viewportBuilder: (_, offset) => TerminalRenderer(
+                          key: _rendererKey,
+                          theme: _theme,
+                          offset: offset,
+                          metrics: _metrics,
+                          renderObserver: _controller,
+                          terminal: _binding.terminal,
+                          renderCache: cache,
+                          preeditText: _binding.preeditText,
+                          blinkVisible: _blinkVisible,
+                          linkSnapshot: _links.snapshot(),
+                          onResize: _handleResize,
+                          onViewportChanged: _binding.handleViewportChanged,
+                        ),
                       ),
                     ),
                   ),
@@ -363,6 +373,16 @@ class _TerminalViewState extends State<TerminalView> {
         _controller.keyboardState != .disabled) {
       _controller.showKeyboard();
       _updateTextInputGeometry();
+    }
+  }
+
+  void _handleTap() {
+    _controller.requestFocus();
+    // On touch platforms the system keyboard can be dismissed (back
+    // button) with focus retained, so a tap must always re-summon it —
+    // focus-change alone would never fire again.
+    if (widget.showKeyboard && _controller.keyboardState != .disabled) {
+      _controller.showKeyboard();
     }
   }
 

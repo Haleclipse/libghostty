@@ -15,4 +15,15 @@ abstract class TerminalRenderObserver implements Listenable {
   /// draws a filled cursor, while an unfocused terminal draws a hollow
   /// block outline.
   bool get hasFocus;
+
+  /// Called immediately before the renderer resizes the terminal grid.
+  ///
+  /// Gives the observer a chance to drop idle tracked state (e.g. the
+  /// selection gesture's repeat-detection pin left behind by a tap). A
+  /// tracked pin on a viewport row anchors that row during the resize
+  /// reflow: a shrinking grid then pushes rows into scrollback instead
+  /// of trimming blank rows, and the following grow appends blank rows
+  /// instead of pulling them back — permanently inflating the grid
+  /// across a soft-keyboard show/hide cycle.
+  void willResizeGrid() {}
 }

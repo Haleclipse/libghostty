@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:libghostty/libghostty.dart';
@@ -455,6 +456,7 @@ class TerminalRenderBox extends RenderBox {
     final dpr = _currentDevicePixelRatio;
     final atlasReconfigured = _acquireAtlasForCurrentConfig(dpr: dpr);
 
+    final oldRows = _paintState.rows;
     final gridChanged =
         newCols != _paintState.cols || newRows != _paintState.rows;
     if (gridChanged) {
@@ -463,6 +465,24 @@ class TerminalRenderBox extends RenderBox {
       _paintState.devicePixelRatio = dpr;
       if (newCols > 0 && newRows > 0) {
         _pipeline.configureGrid(newRows, newCols);
+        // Let the controller drop idle tracked pins (tap repeat-detection
+        // refs) that would anchor rows during the reflow below.
+        _renderObserver.willResizeGrid();
+        // libghostty reclaims scrollback rows on a row-count grow only
+        // while the viewport is bottom-pinned; with any other viewport
+        // anchor (including a row pin that is mathematically at the
+        // bottom, e.g. after a shrink pushed rows into scrollback) it
+        // appends blank rows instead, so rows pushed out by the
+        // preceding shrink (e.g. a soft-keyboard cycle) never return
+        // and the grid inflates permanently (phantom blank rows below
+        // the prompt, cursor detached). Whenever scrollback exists,
+        // pin to the bottom for the resize, then restore the reading
+        // position (scrollToRow clamps inside libghostty).
+        final scrollbarBefore = _terminal.scrollbar;
+        final reclaimFromHistory =
+            newRows > oldRows &&
+            scrollbarBefore.total > scrollbarBefore.visible;
+        if (reclaimFromHistory) _terminal.scrollToBottom();
         // Cell size is reported in physical pixels so size-report
         // escapes and Kitty graphics geometry match a native terminal
         // at the same DPI.
@@ -472,6 +492,25 @@ class TerminalRenderBox extends RenderBox {
           cellWidthPx: (_paintState.metrics.cellWidth * dpr).round(),
           cellHeightPx: (_paintState.metrics.cellHeight * dpr).round(),
         );
+        if (reclaimFromHistory &&
+            scrollbarBefore.offset + scrollbarBefore.visible <
+                scrollbarBefore.total) {
+          // Only readers actually scrolled into history get their row
+          // position back; at-bottom viewports stay bottom-pinned (a
+          // row pin at the mathematical bottom is what breaks the next
+          // grow's reclaim).
+          _terminal.scrollToRow(scrollbarBefore.offset);
+        }
+        if (kDebugMode) {
+          final sb = _terminal.scrollbar;
+          debugPrint(
+            'flterm>> resize ${newCols}x$newRows '
+            'sb ${scrollbarBefore.total}/${scrollbarBefore.offset}'
+            '/${scrollbarBefore.visible}'
+            ' -> ${sb.total}/${sb.offset}/${sb.visible} '
+            'stick=$_stickToBottom reclaim=$reclaimFromHistory',
+          );
+        }
         _onResize?.call(newCols, newRows);
       }
     } else if (_paintState.devicePixelRatio != dpr) {
@@ -563,6 +602,12 @@ class TerminalRenderBox extends RenderBox {
     final targetRow = (pixels / cellHeight).floor();
     if (targetRow == scrollbar.offset) return;
 
+    if (kDebugMode) {
+      debugPrint(
+        'flterm>> onScroll toRow=$targetRow (was=${scrollbar.offset} '
+        'pixels=${pixels.toStringAsFixed(1)} stick=$_stickToBottom)',
+      );
+    }
     _terminal.scrollToRow(targetRow);
     _onViewportChanged?.call();
     _markFrameDirty();
@@ -618,8 +663,25 @@ class TerminalRenderBox extends RenderBox {
       final correction = maxExtent - _offset.pixels;
       if (correction.abs() > 0.01) _offset.correctBy(correction);
       if (scrollbar.offset < scrollbackLen) {
+        if (kDebugMode) {
+          debugPrint(
+            'flterm>> sync scrollToBottom (offset=${scrollbar.offset} '
+            'len=$scrollbackLen)',
+          );
+        }
         _terminal.scrollToBottom();
         _onViewportChanged?.call();
+      }
+    } else if (cellHeight > 0) {
+      // Reading scrollback: the terminal viewport is a content-anchored
+      // pin, so it is the authority. Re-align the scroll offset to it
+      // when they disagree (a resize can move rows between scrollback and
+      // the active area, or clamp pixels silently), so rendered content
+      // never desyncs from the scrollbar and subsequent gestures.
+      final anchor = scrollbar.offset * cellHeight;
+      final pixels = _offset.pixels.clamp(0.0, maxExtent);
+      if ((pixels / cellHeight).floor() != scrollbar.offset) {
+        _offset.correctBy(anchor - _offset.pixels);
       }
     }
     _offset.applyContentDimensions(0, maxExtent);

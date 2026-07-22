@@ -23,6 +23,7 @@ final class SelectionGestureDriver {
   final SelectionGestureEvent _autoscroll = .autoscrollTick();
   final _pressClock = Stopwatch()..start();
   List<int>? _wordBoundaryCodepoints;
+  var _pressed = false;
 
   SelectionGestureDriver(Terminal terminal)
     : _gesture = SelectionGesture(terminal);
@@ -72,6 +73,7 @@ final class SelectionGestureDriver {
     required Offset localPosition,
     required TerminalGestureSettings settings,
   }) {
+    _pressed = true;
     _wordBoundaryCodepoints = settings.wordBoundaries?.runes.toList(
       growable: false,
     );
@@ -87,13 +89,26 @@ final class SelectionGestureDriver {
   }
 
   Selection? release(GridRef? ref) {
+    _pressed = false;
     _release.setRef(ref);
     return _gesture.apply(_release);
   }
 
   void reset() {
+    _pressed = false;
     _wordBoundaryCodepoints = null;
     _gesture.reset();
+  }
+
+  /// Drops the gesture's retained tracked refs when no press is in
+  /// progress. The gesture keeps the last press ref alive after release
+  /// for double/triple-click detection; that tracked pin anchors a grid
+  /// row and corrupts resize reflow (see
+  /// [TerminalRenderObserver.willResizeGrid]). Losing the multi-click
+  /// chain across a grid resize is imperceptible; losing grid integrity
+  /// is not.
+  void resetIfIdle() {
+    if (!_pressed) reset();
   }
 
   void _setWordBoundaryCodepoints(SelectionGestureEvent event) {

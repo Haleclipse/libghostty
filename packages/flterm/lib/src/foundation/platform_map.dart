@@ -1,4 +1,5 @@
-import 'package:flutter/services.dart' show PhysicalKeyboardKey;
+import 'package:flutter/services.dart'
+    show LogicalKeyboardKey, PhysicalKeyboardKey;
 import 'package:libghostty/libghostty.dart' show Key;
 
 final Map<int, Key> _codepointToKey = {
@@ -220,3 +221,50 @@ Key keyFromPhysical(PhysicalKeyboardKey physical) {
 /// Used by the key encoder to determine the unshifted codepoint that
 /// libghostty expects for keyboard input encoding.
 int unshiftedCodepointForKey(Key key) => _keyToCodepoint[key] ?? 0;
+
+/// Control and navigation keys by logical identity, for events whose
+/// physical key cannot be resolved: Android software keyboards and injected
+/// key events synthesize KeyEvents without a scancode, so [keyFromPhysical]
+/// returns [Key.unidentified] for them.
+final Map<LogicalKeyboardKey, Key> _logicalToKey = {
+  LogicalKeyboardKey.backspace: Key.backspace,
+  LogicalKeyboardKey.enter: Key.enter,
+  LogicalKeyboardKey.numpadEnter: Key.numpadEnter,
+  LogicalKeyboardKey.tab: Key.tab,
+  LogicalKeyboardKey.escape: Key.escape,
+  LogicalKeyboardKey.space: Key.space,
+  LogicalKeyboardKey.arrowUp: Key.arrowUp,
+  LogicalKeyboardKey.arrowDown: Key.arrowDown,
+  LogicalKeyboardKey.arrowLeft: Key.arrowLeft,
+  LogicalKeyboardKey.arrowRight: Key.arrowRight,
+  LogicalKeyboardKey.home: Key.home,
+  LogicalKeyboardKey.end: Key.end,
+  LogicalKeyboardKey.pageUp: Key.pageUp,
+  LogicalKeyboardKey.pageDown: Key.pageDown,
+  LogicalKeyboardKey.delete: Key.delete,
+  LogicalKeyboardKey.insert: Key.insert,
+  LogicalKeyboardKey.contextMenu: Key.contextMenu,
+  LogicalKeyboardKey.shiftLeft: Key.shiftLeft,
+  LogicalKeyboardKey.shiftRight: Key.shiftRight,
+  LogicalKeyboardKey.controlLeft: Key.controlLeft,
+  LogicalKeyboardKey.controlRight: Key.controlRight,
+  LogicalKeyboardKey.altLeft: Key.altLeft,
+  LogicalKeyboardKey.altRight: Key.altRight,
+  LogicalKeyboardKey.metaLeft: Key.metaLeft,
+  LogicalKeyboardKey.metaRight: Key.metaRight,
+  for (var i = 0; i < 12; i++)
+    LogicalKeyboardKey(LogicalKeyboardKey.f1.keyId + i):
+        Key.values[Key.f1.index + i],
+};
+
+/// Maps a Flutter [LogicalKeyboardKey] to the corresponding libghostty
+/// [Key]. Fallback for [keyFromPhysical]: covers control/navigation keys by
+/// identity and printable ASCII via the logical key id (which equals the
+/// character's codepoint for printable keys).
+Key keyFromLogical(LogicalKeyboardKey logical) {
+  final mapped = _logicalToKey[logical];
+  if (mapped != null) return mapped;
+  final id = logical.keyId;
+  if (id >= 0x20 && id < 0x7f) return _codepointToKey[id] ?? .unidentified;
+  return .unidentified;
+}

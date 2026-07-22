@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart'
-    show VoidCallback, defaultTargetPlatform, kIsWeb;
+    show TargetPlatform, VoidCallback, defaultTargetPlatform, kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:libghostty/libghostty.dart' as vt;
@@ -26,6 +26,17 @@ class TerminalControllerImpl extends TerminalController
   static const _space = 0x20;
   static const _macFunctionKeyStart = 0xF700;
   static const _macFunctionKeyEnd = 0xF8FF;
+
+  /// Gesture settings for selection-handle drags: cell-only behaviors so
+  /// repeated handle grabs never escalate to word or line selection
+  /// through press repeat detection.
+  static const _handleDragSettings = TerminalGestureSettings(
+    selectionBehaviors: SelectionGestureBehaviors(
+      singleClick: .cell,
+      doubleClick: .cell,
+      tripleClick: .cell,
+    ),
+  );
 
   static final _crBytes = Uint8List.fromList([_cr]);
   static final _formFeedBytes = Uint8List.fromList([_formFeed]);
@@ -293,7 +304,12 @@ class TerminalControllerImpl extends TerminalController
       if (_extendSelection(event.logicalKey)) return .handled;
     }
 
-    final key = keyFromPhysical(event.physicalKey);
+    // Software keyboards and injected events (Android) synthesize KeyEvents
+    // without a scancode; fall back to logical identity for those.
+    var key = keyFromPhysical(event.physicalKey);
+    if (key == vt.Key.unidentified) {
+      key = keyFromLogical(event.logicalKey);
+    }
     final KeyAction? action = switch (event) {
       KeyDownEvent() => .press,
       KeyUpEvent() => .release,
@@ -480,6 +496,9 @@ class TerminalControllerImpl extends TerminalController
   void hideKeyboard() => _updateKeyboardState(.hidden);
 
   @override
+  void willResizeGrid() => _selectionGesture.resetIfIdle();
+
+  @override
   bool modeGet(TerminalMode mode) => terminal.modeGet(mode);
 
   @override
@@ -505,10 +524,25 @@ class TerminalControllerImpl extends TerminalController
     terminal.scrollToBottom();
     if (terminal.scrollbar.offset != previousOffset) handleViewportChanged();
     final controller = _scrollController;
-    if (controller != null && controller.hasClients) {
-      final max = controller.position.maxScrollExtent;
-      if (max.isFinite) controller.jumpTo(max);
+    if (controller == null || !controller.hasClients) return;
+
+    // Scroll extents lag one layout behind the terminal: output or an
+    // animated resize (soft keyboard) may have grown the scrollback this
+    // frame, so maxScrollExtent can be stale. Jumping to a stale extent
+    // makes the scroll listener re-pin the viewport a few rows above the
+    // active area, leaving the cursor out of view. Derive the target from
+    // the terminal itself; the next layout reconciles the extents.
+    final position = controller.position;
+    final cellHeight = _lastMetrics.cellHeight;
+    final double target;
+    if (cellHeight > 0) {
+      final scrollbar = terminal.scrollbar;
+      target = (scrollbar.total - scrollbar.visible) * cellHeight;
+    } else {
+      target = position.maxScrollExtent;
     }
+    if (!target.isFinite || position.pixels == target) return;
+    controller.jumpTo(target);
   }
 
   @override
@@ -581,6 +615,22 @@ class TerminalControllerImpl extends TerminalController
 
   @override
   void showKeyboard() => _updateKeyboardState(.showing);
+
+  @override
+  void startSelectionHandleDrag({
+    required Position anchor,
+    required Offset localPosition,
+  }) {
+    // The anchor arrives in screen coordinates so it stays valid even when
+    // the anchored endpoint is scrolled outside the viewport. The press
+    // result is intentionally not applied: the existing selection stays on
+    // screen until the first drag event replaces it.
+    _selectionGesture.press(
+      ref: GridRef.at(terminal, anchor, pointTag: .screen),
+      localPosition: localPosition,
+      settings: _handleDragSettings,
+    );
+  }
 
   @override
   void toggleMod(Mods mod) {
@@ -998,8 +1048,25 @@ class TerminalControllerImpl extends TerminalController
     scrollController.jumpTo(clamped);
   }
 
+  /// On touch platforms, closing the text-input connection and immediately
+  /// re-attaching it (to keep hardware-keyboard IME composition working)
+  /// coalesces into a no-op on the platform side: the soft keyboard never
+  /// hides (observed on Android/HyperOS, `mInputShown` stays true). Keep
+  /// the eager re-attach for desktop only; mobile reopens the connection
+  /// lazily on the next show().
+  bool get _reattachKeepsImeVisible => switch (defaultTargetPlatform) {
+    TargetPlatform.android || TargetPlatform.iOS => true,
+    _ => false,
+  };
+
   Future<void> _updateKeyboardState(KeyboardState newState) async {
-    if (newState == _keyboardState) return;
+    // A repeated `.showing` request must still reach TextInput.show():
+    // the platform can dismiss the keyboard (e.g. Android back button)
+    // without this controller observing any state change. show() is
+    // idempotent while the keyboard is already visible.
+    if (newState == _keyboardState && newState != KeyboardState.showing) {
+      return;
+    }
     _keyboardState = newState;
 
     switch (newState) {
@@ -1008,7 +1075,7 @@ class TerminalControllerImpl extends TerminalController
         _textInput.show();
       case .showing:
         _focusNode?.requestFocus();
-      case .hidden when hasFocus:
+      case .hidden when hasFocus && !_reattachKeepsImeVisible:
         _textInput.hide();
         _textInput.ensureAttached(keyboardAppearance: _brightness);
       case .hidden:

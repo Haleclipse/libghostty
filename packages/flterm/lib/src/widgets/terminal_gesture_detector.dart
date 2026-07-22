@@ -29,6 +29,10 @@ class TerminalGestureDetector extends StatefulWidget {
   final ValueChanged<ActivatedLink>? onLinkActivate;
   final ScrollController? scrollController;
 
+  /// Fired after a completed tap that did not activate a link. The view
+  /// uses this to (re)summon the software keyboard on touch platforms.
+  final VoidCallback? onTap;
+
   const TerminalGestureDetector({
     super.key,
     required this.child,
@@ -37,6 +41,7 @@ class TerminalGestureDetector extends StatefulWidget {
     required this.binding,
     required this.links,
     this.onLinkActivate,
+    this.onTap,
     this.scrollController,
     this.settings = const TerminalGestureSettings(),
   });
@@ -217,6 +222,7 @@ class _TerminalGestureDetectorState extends State<TerminalGestureDetector> {
       if (link != null) widget.onLinkActivate?.call(link);
       return;
     }
+    widget.onTap?.call();
     if (_pressCell == null &&
         _isMouseTracked(HardwareKeyboard.instance.isShiftPressed)) {
       return;
