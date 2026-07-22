@@ -461,6 +461,46 @@ void main() {
       });
     });
 
+    group('hasVtProcessingError', () {
+      test('is false for a fresh terminal', () {
+        expect(terminal.hasVtProcessingError, isFalse);
+      });
+    });
+
+    group('kittyTempFileDirectory', () {
+      test('returns null when Kitty graphics are unavailable', () {
+        terminal.setKittyTempFileDirectory('/tmp/kitty');
+
+        final result = terminal.kittyTempFileDirectory;
+
+        expect(result, isNull);
+      });
+
+      test('accepts a directory when Kitty graphics are unavailable', () {
+        expect(
+          () => terminal.setKittyTempFileDirectory('/tmp/kitty'),
+          returnsNormally,
+        );
+      });
+
+      test('accepts null when Kitty graphics are unavailable', () {
+        expect(() => terminal.setKittyTempFileDirectory(null), returnsNormally);
+      });
+
+      test('throws for an empty directory', () {
+        expect(
+          () => terminal.setKittyTempFileDirectory(''),
+          throwsA(
+            isA<InvalidValueException>().having(
+              (error) => error.message,
+              'message',
+              'Kitty temporary-file directory must not be empty.',
+            ),
+          ),
+        );
+      });
+    });
+
     group('listeners', () {
       test('notifies on write', () {
         var count = 0;

@@ -479,6 +479,53 @@ void main() {
       });
     });
 
+    group('hasVtProcessingError', () {
+      test('is false for a fresh terminal', () {
+        expect(terminal.hasVtProcessingError, isFalse);
+      });
+    });
+
+    group('kittyTempFileDirectory', () {
+      test('returns the configured directory', () {
+        terminal.setKittyTempFileDirectory('/tmp/kitty');
+
+        final result = terminal.kittyTempFileDirectory;
+
+        expect(result, '/tmp/kitty');
+      });
+
+      test('returns an empty directory after disabling', () {
+        terminal.setKittyTempFileDirectory('/tmp/kitty');
+        terminal.setKittyTempFileDirectory(null);
+
+        final result = terminal.kittyTempFileDirectory;
+
+        expect(result, '');
+      });
+
+      test('throws for an oversized directory', () {
+        final directory = List.filled(16 * 1024, 'a').join();
+
+        expect(
+          () => terminal.setKittyTempFileDirectory(directory),
+          throwsA(isA<OutOfMemoryException>()),
+        );
+      });
+
+      test('throws for an empty directory', () {
+        expect(
+          () => terminal.setKittyTempFileDirectory(''),
+          throwsA(
+            isA<InvalidValueException>().having(
+              (error) => error.message,
+              'message',
+              'Kitty temporary-file directory must not be empty.',
+            ),
+          ),
+        );
+      });
+    });
+
     group('listeners', () {
       test('notifies on write', () {
         var count = 0;

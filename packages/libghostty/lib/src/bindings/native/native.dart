@@ -1198,6 +1198,11 @@ class NativeBindings implements GhosttyBindings {
   }
 
   @override
+  CResult<bool> terminalGetVtProcessingError(int handle) {
+    return _terminalGetBool(handle, .vtProcessingError);
+  }
+
+  @override
   Result terminalSetTitle(int handle, String? title) {
     return _terminalSetString(handle, .title, title);
   }
@@ -1322,8 +1327,8 @@ class NativeBindings implements GhosttyBindings {
   }
 
   @override
-  CResult<bool> terminalGetKittyImageMediumTempFile(int handle) {
-    return _terminalGetBool(handle, .kittyImageMediumTempFile);
+  CResult<String> terminalGetKittyImageMediumTempFile(int handle) {
+    return _terminalGetString(handle, .kittyImageMediumTempFile);
   }
 
   @override
@@ -1342,8 +1347,8 @@ class NativeBindings implements GhosttyBindings {
   }
 
   @override
-  Result terminalSetKittyImageMediumTempFile(int handle, {bool? enabled}) {
-    return _terminalSetBool(handle, .kittyImageMediumTempFile, enabled);
+  Result terminalSetKittyImageMediumTempFile(int handle, String? directory) {
+    return _terminalSetString(handle, .kittyImageMediumTempFile, directory);
   }
 
   @override
@@ -2114,6 +2119,7 @@ class NativeBindings implements GhosttyBindings {
       data,
       _outGhosttyString.cast(),
     );
+    if (result != .success) return (result, '');
     final ptr = _outGhosttyString.ref.ptr;
     final len = _outGhosttyString.ref.len;
     if (len == 0 || ptr == nullptr) return (result, '');

@@ -1370,6 +1370,11 @@ class WasmBindings implements GhosttyBindings {
   }
 
   @override
+  CResult<bool> terminalGetVtProcessingError(int handle) {
+    return _terminalGetBool(handle, .vtProcessingError);
+  }
+
+  @override
   Result terminalSetTitle(int handle, String? title) {
     return _terminalSetString(handle, TerminalOption.title, title);
   }
@@ -1499,8 +1504,8 @@ class WasmBindings implements GhosttyBindings {
   }
 
   @override
-  CResult<bool> terminalGetKittyImageMediumTempFile(int handle) {
-    return _terminalGetBool(handle, .kittyImageMediumTempFile);
+  CResult<String> terminalGetKittyImageMediumTempFile(int handle) {
+    return _terminalGetString(handle, .kittyImageMediumTempFile);
   }
 
   @override
@@ -1519,8 +1524,8 @@ class WasmBindings implements GhosttyBindings {
   }
 
   @override
-  Result terminalSetKittyImageMediumTempFile(int handle, {bool? enabled}) {
-    return _terminalSetBool(handle, .kittyImageMediumTempFile, enabled);
+  Result terminalSetKittyImageMediumTempFile(int handle, String? directory) {
+    return _terminalSetString(handle, .kittyImageMediumTempFile, directory);
   }
 
   @override
@@ -4419,12 +4424,18 @@ class WasmBindings implements GhosttyBindings {
   CResult<String> _terminalGetString(int handle, TerminalData data) {
     final strSize = _layout.stringSize;
     final strPtr = _exports.ghostty_wasm_alloc_u8_array(strSize);
-    final result = _exports.ghostty_terminal_get(handle, data.value, strPtr);
+    final result = Result.fromValue(
+      _exports.ghostty_terminal_get(handle, data.value, strPtr),
+    );
+    if (result != .success) {
+      _exports.ghostty_wasm_free_u8_array(strPtr, strSize);
+      return (result, '');
+    }
     final ptr = _mem.readU32(strPtr);
     final len = _mem.readU32(strPtr + _layout.stringLen);
     _exports.ghostty_wasm_free_u8_array(strPtr, strSize);
-    if (len == 0 || ptr == 0) return (.fromValue(result), '');
-    return (.fromValue(result), utf8.decode(_mem.readBytes(ptr, len)));
+    if (len == 0 || ptr == 0) return (result, '');
+    return (result, utf8.decode(_mem.readBytes(ptr, len)));
   }
 
   Result _terminalSetString(int handle, TerminalOption option, String? value) {

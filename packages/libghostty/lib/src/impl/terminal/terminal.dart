@@ -107,22 +107,6 @@ final class Terminal with Listenable {
     _finalizer.attach(this, _handle, detach: this);
   }
 
-  /// Opaque token that changes when scrollback compression may have new work.
-  ///
-  /// Terminal operations such as writes, resizing, and viewport movement may
-  /// change the token. Cache it and restart an idle delay whenever it changes.
-  /// Only equality comparisons are meaningful, and compression itself does not
-  /// change the token.
-  ///
-  /// ```dart
-  /// final previous = terminal.compressionActivity;
-  /// terminal.write(data);
-  /// if (terminal.compressionActivity != previous) scheduleCompression();
-  /// ```
-  int get compressionActivity {
-    return check(bindings.terminalCompressionActivity(_handle));
-  }
-
   /// The active screen buffer (primary or alternate).
   ///
   /// Programs switch screens via DEC private mode 1049 (e.g. when entering
@@ -152,6 +136,22 @@ final class Terminal with Listenable {
   /// Returns null if no default has been configured.
   RgbColor? get backgroundDefault {
     return _optionalColor(bindings.terminalGetColorBackgroundDefault(_handle));
+  }
+
+  /// Opaque token that changes when scrollback compression may have new work.
+  ///
+  /// Terminal operations such as writes, resizing, and viewport movement may
+  /// change the token. Cache it and restart an idle delay whenever it changes.
+  /// Only equality comparisons are meaningful, and compression itself does not
+  /// change the token.
+  ///
+  /// ```dart
+  /// final previous = terminal.compressionActivity;
+  /// terminal.write(data);
+  /// if (terminal.compressionActivity != previous) scheduleCompression();
+  /// ```
+  int get compressionActivity {
+    return check(bindings.terminalCompressionActivity(_handle));
   }
 
   /// Effective cursor color (OSC override if active, otherwise default).
@@ -220,6 +220,21 @@ final class Terminal with Listenable {
   /// ```
   TerminalGeometry get geometry => check(bindings.terminalGetGeometry(_handle));
 
+  /// Whether VT processing encountered a non-gracefully handled error.
+  ///
+  /// The flag is informational and remains set for this terminal's lifetime,
+  /// including after [reset]. Gracefully handled protocol errors, configured
+  /// limits, malformed input, and unsupported input do not set it.
+  ///
+  /// ```dart
+  /// if (terminal.hasVtProcessingError) {
+  ///   reportDegradedTerminalState();
+  /// }
+  /// ```
+  bool get hasVtProcessingError {
+    return check(bindings.terminalGetVtProcessingError(_handle));
+  }
+
   /// Total terminal height in pixels (rows * cell height).
   int get heightPx => check(bindings.terminalGetHeightPx(_handle));
 
@@ -236,13 +251,6 @@ final class Terminal with Listenable {
     final (code, value) = bindings.terminalGetKittyImageMediumSharedMem(
       _handle,
     );
-    return code == .noValue ? null : check((code, value));
-  }
-
-  /// Whether the temporary file medium is enabled for Kitty image loading.
-  /// Returns null when Kitty graphics are not compiled in.
-  bool? get isKittyTempFileMedium {
-    final (code, value) = bindings.terminalGetKittyImageMediumTempFile(_handle);
     return code == .noValue ? null : check((code, value));
   }
 
@@ -277,6 +285,19 @@ final class Terminal with Listenable {
   KittyKeyFlags get kittyKeyboardFlags => KittyKeyFlags.fromValue(
     check(bindings.terminalGetKittyKeyboardFlags(_handle)),
   );
+
+  /// Directory allowed for Kitty image loading through temporary files.
+  ///
+  /// An empty string means the medium is disabled. Returns null when Kitty
+  /// graphics support is not compiled into the library.
+  ///
+  /// ```dart
+  /// final directory = terminal.kittyTempFileDirectory;
+  /// ```
+  String? get kittyTempFileDirectory {
+    final (code, value) = bindings.terminalGetKittyImageMediumTempFile(_handle);
+    return code == .noValue ? null : check((code, value));
+  }
 
   /// Active mouse tracking mode derived from the current terminal modes.
   ///
@@ -472,6 +493,29 @@ final class Terminal with Listenable {
 
   int get _handleOrNull => _disposed ? 0 : _handle;
 
+  /// Compresses eligible scrollback storage without changing terminal data.
+  ///
+  /// Incremental mode performs bounded work. Call it again while the result is
+  /// [TerminalCompressionResult.pending] and [compressionActivity] has not
+  /// changed. Full mode scans all currently eligible pages synchronously and
+  /// can stall on large histories. Unsupported targets return
+  /// [TerminalCompressionResult.unsupported].
+  ///
+  /// ```dart
+  /// void compressOnce() {
+  ///   final activity = terminal.compressionActivity;
+  ///   final result = terminal.compress();
+  ///   if (result == .pending && terminal.compressionActivity == activity) {
+  ///     scheduleIdle(compressOnce);
+  ///   }
+  /// }
+  /// ```
+  TerminalCompressionResult compress({
+    TerminalCompressionMode mode = .incremental,
+  }) {
+    return check(bindings.terminalCompress(_handle, mode));
+  }
+
   /// Releases the native terminal handle and clears registered callbacks.
   ///
   /// Must be called to free resources; the terminal must not be used
@@ -505,30 +549,6 @@ final class Terminal with Listenable {
     if (code == .noValue) return null;
     checkCode(code);
     return text;
-  }
-
-  /// Compresses eligible scrollback storage without changing terminal data.
-  ///
-  /// Incremental mode performs bounded work. Call it again while the result is
-  /// [TerminalCompressionResult.pending] and [compressionActivity] has not
-  /// changed. Full mode scans all currently eligible pages synchronously and
-  /// can stall on large histories. Unsupported targets return
-  /// [TerminalCompressionResult.unsupported].
-  ///
-  /// ```dart
-  /// void compressOnce() {
-  ///   final activity = terminal.compressionActivity;
-  ///   final result = terminal.compress();
-  ///   if (result == TerminalCompressionResult.pending &&
-  ///       terminal.compressionActivity == activity) {
-  ///     scheduleIdle(compressOnce);
-  ///   }
-  /// }
-  /// ```
-  TerminalCompressionResult compress({
-    TerminalCompressionMode mode = .incremental,
-  }) {
-    return check(bindings.terminalCompress(_handle, mode));
   }
 
   /// Queries whether the given terminal [mode] is currently enabled.
@@ -731,11 +751,23 @@ final class Terminal with Listenable {
     );
   }
 
-  /// Enables or disables the temporary file medium for Kitty image loading.
-  void setKittyTempFileMedium({required bool enabled}) {
-    checkCode(
-      bindings.terminalSetKittyImageMediumTempFile(_handle, enabled: enabled),
-    );
+  /// Restricts Kitty temporary-file image loading to [directory].
+  ///
+  /// Passing null disables the medium. The directory is copied, so callers do
+  /// not need to retain the string. Throws [InvalidValueException] when the
+  /// directory is empty and [OutOfMemoryException] when it exceeds the native
+  /// path capacity.
+  ///
+  /// ```dart
+  /// terminal.setKittyTempFileDirectory('/tmp/terminal-images');
+  /// ```
+  void setKittyTempFileDirectory(String? directory) {
+    if (directory == '') {
+      throw const InvalidValueException(
+        'Kitty temporary-file directory must not be empty.',
+      );
+    }
+    checkCode(bindings.terminalSetKittyImageMediumTempFile(_handle, directory));
   }
 
   /// Feeds raw VT-encoded bytes into the terminal for processing.

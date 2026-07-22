@@ -147,6 +147,7 @@ abstract interface class GhosttyBindings {
   CResult<int> terminalGetHeightPx(int handle);
   CResult<TerminalGeometry> terminalGetGeometry(int handle);
   CResult<bool> terminalGetViewportActive(int handle);
+  CResult<bool> terminalGetVtProcessingError(int handle);
   Result terminalSetTitle(int handle, String? title);
   Result terminalSetPwd(int handle, String? pwd);
   Result terminalSetDefaultCursorShape(int handle, CursorShape? shape);
@@ -172,11 +173,11 @@ abstract interface class GhosttyBindings {
 
   CResult<int> terminalGetKittyImageStorageLimit(int handle);
   CResult<bool> terminalGetKittyImageMediumFile(int handle);
-  CResult<bool> terminalGetKittyImageMediumTempFile(int handle);
+  CResult<String> terminalGetKittyImageMediumTempFile(int handle);
   CResult<bool> terminalGetKittyImageMediumSharedMem(int handle);
   Result terminalSetKittyImageStorageLimit(int handle, int? limit);
   Result terminalSetKittyImageMediumFile(int handle, {bool? enabled});
-  Result terminalSetKittyImageMediumTempFile(int handle, {bool? enabled});
+  Result terminalSetKittyImageMediumTempFile(int handle, String? directory);
   Result terminalSetKittyImageMediumSharedMem(int handle, {bool? enabled});
   Result terminalSetApcBufferLimit(int handle, int? bytes);
   Result terminalSetKittyApcBufferLimit(int handle, int? bytes);

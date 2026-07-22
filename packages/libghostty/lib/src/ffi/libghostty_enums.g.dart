@@ -2711,12 +2711,13 @@ enum TerminalData {
   /// Output type: bool *
   kittyImageMediumFile(27),
 
-  /// Whether the temporary file medium is enabled for Kitty image loading
-  /// on the active screen.
+  /// The directory allowed for Kitty image loading via the temporary file
+  /// medium on the active screen. The string is empty when the medium is
+  /// disabled.
   ///
   /// Returns GHOSTTY_NO_VALUE when Kitty graphics are disabled at build time.
   ///
-  /// Output type: bool *
+  /// Output type: String *
   kittyImageMediumTempFile(28),
 
   /// Whether the shared memory medium is enabled for Kitty image loading
@@ -2759,7 +2760,21 @@ enum TerminalData {
   /// and false when the user has scrolled into history.
   ///
   /// Output type: bool *
-  viewportActive(32);
+  viewportActive(32),
+
+  /// Whether VT processing encountered a non-gracefully handled error that may
+  /// have prevented a terminal-owned semantic update.
+  ///
+  /// Processing remains best-effort, and ghostty_terminal_reset() does not
+  /// clear it. Gracefully handled protocol failures, configured limits,
+  /// malformed or unsupported input, and failures limited to external effects
+  /// or query responses do not set it.
+  ///
+  /// This can't currently be unset. This is purely informational to consumers
+  /// if there was some error that happened at some point during VT processing.
+  ///
+  /// Output type: bool *
+  vtProcessingError(33);
 
   final int value;
   const TerminalData(this.value);
@@ -2798,6 +2813,7 @@ enum TerminalData {
     30 => kittyGraphics,
     31 => selection,
     32 => viewportActive,
+    33 => vtProcessingError,
     _ => throw ArgumentError('Unknown value for TerminalData: $value'),
   };
 }
@@ -2932,12 +2948,13 @@ enum TerminalOption {
   /// Input type: bool*
   kittyImageMediumFile(16),
 
-  /// Enable or disable Kitty image loading via the temporary file medium.
+  /// Enable Kitty image loading via the temporary file medium, restricted to
+  /// the provided directory. The string data is copied into the terminal.
   ///
-  /// A NULL value pointer is a no-op. Has no effect when Kitty graphics
-  /// are disabled at build time.
+  /// A NULL value pointer disables the temporary file medium. Has no effect
+  /// when Kitty graphics are disabled at build time.
   ///
-  /// Input type: bool*
+  /// Input type: String*
   kittyImageMediumTempFile(17),
 
   /// Enable or disable Kitty image loading via the shared memory medium.

@@ -470,6 +470,14 @@ void main() {
         expect(bindings.terminalGetViewportActive(t).$2, isFalse);
       });
     });
+
+    group('terminalGetVtProcessingError', () {
+      test('returns false for a fresh terminal', () {
+        final result = bindings.terminalGetVtProcessingError(terminal);
+
+        expect(result, (Result.success, false));
+      });
+    });
   });
 
   group('key event', () {
@@ -1139,48 +1147,94 @@ void main() {
 
     tearDown(() => bindings.terminalFree(terminal));
 
-    group('getters', () {
-      test('return success or noValue', () {
+    group('terminalGetKittyImageStorageLimit', () {
+      test('returns success or noValue', () {
         final (code, _) = bindings.terminalGetKittyImageStorageLimit(terminal);
+
         expect(code, anyOf(Result.success, Result.noValue));
-
-        final (fileCode, _) = bindings.terminalGetKittyImageMediumFile(
-          terminal,
-        );
-        expect(fileCode, anyOf(Result.success, Result.noValue));
-
-        final (tempFileCode, _) = bindings.terminalGetKittyImageMediumTempFile(
-          terminal,
-        );
-        expect(tempFileCode, anyOf(Result.success, Result.noValue));
-
-        final (sharedMemCode, _) = bindings
-            .terminalGetKittyImageMediumSharedMem(terminal);
-        expect(sharedMemCode, anyOf(Result.success, Result.noValue));
       });
     });
 
-    group('setters', () {
-      test('accept values', () {
-        expect(
-          bindings.terminalSetKittyImageStorageLimit(terminal, 1024 * 1024),
-          Result.success,
+    group('terminalGetKittyImageMediumFile', () {
+      test('returns success or noValue', () {
+        final (code, _) = bindings.terminalGetKittyImageMediumFile(terminal);
+
+        expect(code, anyOf(Result.success, Result.noValue));
+      });
+    });
+
+    group('terminalGetKittyImageMediumSharedMem', () {
+      test('returns success or noValue', () {
+        final (code, _) = bindings.terminalGetKittyImageMediumSharedMem(
+          terminal,
         );
-        expect(
-          bindings.terminalSetKittyImageMediumFile(terminal, enabled: true),
-          Result.success,
+
+        expect(code, anyOf(Result.success, Result.noValue));
+      });
+    });
+
+    group('terminalGetKittyImageMediumTempFile', () {
+      test('returns an empty fallback when unavailable', () {
+        checkCode(
+          bindings.terminalSetKittyImageMediumTempFile(terminal, '/tmp/kitty'),
         );
-        expect(
-          bindings.terminalSetKittyImageMediumTempFile(terminal, enabled: true),
-          Result.success,
+
+        final result = bindings.terminalGetKittyImageMediumTempFile(terminal);
+
+        expect(result, (Result.noValue, ''));
+      });
+    });
+
+    group('terminalSetKittyImageStorageLimit', () {
+      test('accepts a byte limit', () {
+        final result = bindings.terminalSetKittyImageStorageLimit(
+          terminal,
+          1024 * 1024,
         );
-        expect(
-          bindings.terminalSetKittyImageMediumSharedMem(
-            terminal,
-            enabled: true,
-          ),
-          Result.success,
+
+        expect(result, Result.success);
+      });
+    });
+
+    group('terminalSetKittyImageMediumFile', () {
+      test('accepts an enabled value', () {
+        final result = bindings.terminalSetKittyImageMediumFile(
+          terminal,
+          enabled: true,
         );
+
+        expect(result, Result.success);
+      });
+    });
+
+    group('terminalSetKittyImageMediumTempFile', () {
+      test('accepts a directory when unavailable', () {
+        final result = bindings.terminalSetKittyImageMediumTempFile(
+          terminal,
+          '/tmp/kitty',
+        );
+
+        expect(result, Result.success);
+      });
+
+      test('accepts null when unavailable', () {
+        final result = bindings.terminalSetKittyImageMediumTempFile(
+          terminal,
+          null,
+        );
+
+        expect(result, Result.success);
+      });
+    });
+
+    group('terminalSetKittyImageMediumSharedMem', () {
+      test('accepts an enabled value', () {
+        final result = bindings.terminalSetKittyImageMediumSharedMem(
+          terminal,
+          enabled: true,
+        );
+
+        expect(result, Result.success);
       });
     });
   });

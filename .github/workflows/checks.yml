@@ -4,7 +4,7 @@ on:
   workflow_call:
 
 env:
-  ZIG_VERSION: "0.15.2"
+  ZIG_VERSION: "0.16.0"
 
 jobs:
   changes:
@@ -168,6 +168,12 @@ jobs:
       - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
         with:
           version: ${{ env.ZIG_VERSION }}
+      - if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          ZIG_CACHE_DIR="$(pwd -W)/.zig-cache"
+          echo "ZIG_GLOBAL_CACHE_DIR=$ZIG_CACHE_DIR" >> "$GITHUB_ENV"
+          echo "ZIG_LOCAL_CACHE_DIR=$ZIG_CACHE_DIR" >> "$GITHUB_ENV"
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.pub-cache

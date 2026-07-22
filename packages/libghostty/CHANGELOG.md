@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Breaking
+
+- **Kitty temporary-file images**: `Terminal.kittyTempFileDirectory` and
+  `Terminal.setKittyTempFileDirectory()` replace the boolean temporary-file
+  medium API. Loading is restricted to the configured directory, and passing
+  null disables the medium.
+
+### Added
+
+- **VT processing diagnostics**: `Terminal.hasVtProcessingError` reports
+  non-gracefully handled terminal-owned semantic update failures.
+
 ### Changed
 
 - **Terminal callback errors**: `Terminal.write()` and callback-emitting
