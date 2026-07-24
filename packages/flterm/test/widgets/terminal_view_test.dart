@@ -1047,12 +1047,42 @@ void main() {
 
       expect(controller.hasFocus, isTrue);
       expect(controller.keyboardState, KeyboardState.hidden);
+      // Mobile (the test default platform): no IME connection is opened
+      // on focus while hidden — rebuilding one via restartInput makes
+      // some IMEs pop up unrequested; it reopens on the next show().
       expect(
         calls.where((call) => call.method == 'TextInput.setClient'),
-        hasLength(1),
+        isEmpty,
       );
       expect(calls.where((call) => call.method == 'TextInput.show'), isEmpty);
     });
+
+    testWidgets(
+      'showKeyboard false still attaches input on desktop focus',
+      (tester) async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+        final calls = recordTextInputCalls();
+
+        await tester.pumpWidget(
+          wrapInApp(controller: controller, showKeyboard: false),
+        );
+
+        await tester.tap(find.byType(TerminalView));
+        await tester.pumpAndSettle();
+
+        expect(controller.hasFocus, isTrue);
+        expect(controller.keyboardState, KeyboardState.hidden);
+        // Desktop keeps the eager attach: hardware-keyboard IME
+        // composition needs a live connection and desktop platforms do
+        // not pop a soft keyboard on restartInput.
+        expect(
+          calls.where((call) => call.method == 'TextInput.setClient'),
+          hasLength(1),
+        );
+        expect(calls.where((call) => call.method == 'TextInput.show'), isEmpty);
+        debugDefaultTargetPlatformOverride = null;
+      },
+    );
 
     testWidgets('touch drag does not create selection', (tester) async {
       writeUtf8(controller, 'hello world');

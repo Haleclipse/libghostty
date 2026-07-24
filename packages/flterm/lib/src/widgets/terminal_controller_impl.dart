@@ -919,7 +919,14 @@ class TerminalControllerImpl extends TerminalController
     if (focused && _keyboardState == .showing) {
       _textInput.show();
     } else if (focused && _keyboardState != .disabled) {
-      _textInput.ensureAttached(keyboardAppearance: _brightness);
+      // Mobile: rebuilding the IME connection on focus regain (e.g.
+      // returning from another route) makes some IMEs pop up
+      // unrequested via restartInput. Reopen lazily on the next
+      // explicit show() instead — same policy as
+      // [_reattachKeepsImeVisible].
+      if (!_reattachKeepsImeVisible) {
+        _textInput.ensureAttached(keyboardAppearance: _brightness);
+      }
     } else if (!focused) {
       if (_keyboardState == .showing) _keyboardState = .hidden;
       _textInput.hide();
